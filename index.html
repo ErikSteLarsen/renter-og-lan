@@ -101,6 +101,11 @@
         </select>
       </div>
       <div class="field">
+        <label for="fee">Termingebyr (kr/mnd)</label>
+        <input type="number" id="fee" value="65" min="0" step="5">
+        <div class="hint">Fast månedlig gebyr til banken</div>
+      </div>
+      <div class="field">
         <label for="taxRate">Rentefradrag (%)</label>
         <input type="number" id="taxRate" value="22" min="0" max="50" step="0.1">
         <div class="hint">Skattefradrag på rentekostnader (22 % i Norge)</div>
@@ -215,8 +220,8 @@ function monthlyRateFromEffective(effAnnual) {
   return Math.pow(1 + effAnnual, 1 / 12) - 1;
 }
 
-function calcLoan(principal, r, nMonths, type, extraMonthly) {
-  if (principal <= 0) return { months: [], totalInterest: 0 };
+function calcLoan(principal, r, nMonths, type, extraMonthly, fee) {
+  if (principal <= 0) return { months: [], totalInterest: 0, totalFees: 0 };
   const months = [];
   let balance = principal;
   let totalInterest = 0;
@@ -239,12 +244,12 @@ function calcLoan(principal, r, nMonths, type, extraMonthly) {
     }
     const extraPrinc = Math.min(extraMonthly, balance - princPay);
     princPay += Math.max(0, extraPrinc);
-    const payment = princPay + interest;
+    const payment = princPay + interest + fee;
     balance = Math.max(0, balance - princPay);
     totalInterest += interest;
-    months.push({ month: m, payment, principal: princPay, interest, balance });
+    months.push({ month: m, payment, principal: princPay, interest, fee, balance });
   }
-  return { months, totalInterest };
+  return { months, totalInterest, totalFees: months.length * fee };
 }
 
 function calculate() {
@@ -253,6 +258,7 @@ function calculate() {
   const years = parseInt(document.getElementById('years').value) || 1;
   const type = document.getElementById('type').value;
   const taxRate = parseFloat(document.getElementById('taxRate').value) / 100;
+  const fee = parseFloat(document.getElementById('fee').value) || 0;
 
   const name1 = document.getElementById('name1').value || 'Person 1';
   const name2 = document.getElementById('name2').value || 'Person 2';
@@ -336,9 +342,9 @@ function calculate() {
   const n = years * 12;
   const totalMortgage = loan1 + loan2;
 
-  const total = calcLoan(totalMortgage, r, n, type, extra1 + extra2);
-  const p1 = calcLoan(loan1, r, n, type, extra1);
-  const p2 = calcLoan(loan2, r, n, type, extra2);
+  const total = calcLoan(totalMortgage, r, n, type, extra1 + extra2, fee);
+  const p1 = calcLoan(loan1, r, n, type, extra1, fee);
+  const p2 = calcLoan(loan2, r, n, type, extra2, fee);
 
   function renderSummary(el, data, loanAmount) {
     const taxDed = data.totalInterest * taxRate;
@@ -366,7 +372,7 @@ function calculate() {
       </div>
       <div class="stat">
         <div class="label">${type === 'serie' ? 'Mnd. betaling (siste)' : 'Totalt tilbakebetalt'}</div>
-        <div class="value">${type === 'serie' ? fmt(lastPay) + ' kr' : fmt(loanAmount + costAfterTax) + ' kr'}</div>
+        <div class="value">${type === 'serie' ? fmt(lastPay) + ' kr' : fmt(loanAmount + costAfterTax + data.totalFees) + ' kr'}</div>
       </div>
       <div class="stat warn">
         <div class="label">Totale rentekostnader</div>
@@ -376,9 +382,13 @@ function calculate() {
         <div class="label">Skattefradrag (${(taxRate * 100).toFixed(0)} %)</div>
         <div class="value">−${fmt(taxDed)} kr</div>
       </div>
+      <div class="stat">
+        <div class="label">Totale gebyr</div>
+        <div class="value">${fmt(data.totalFees)} kr</div>
+      </div>
       <div class="stat full">
-        <div class="label">Rentekostnad etter fradrag</div>
-        <div class="value">${fmt(costAfterTax)} kr</div>
+        <div class="label">Total kostnad (renter etter fradrag + gebyr)</div>
+        <div class="value">${fmt(costAfterTax + data.totalFees)} kr</div>
       </div>
     `;
   }
